@@ -171,10 +171,14 @@ impl MarkerScanState {
 /// can still start `marker` and returns `Incomplete` without consuming input,
 /// so the next parse can avoid rescanning the whole buffered prefix.
 ///
+/// On complete input a missing `marker` backtracks instead, as `take_until`
+/// does, so token-aware parsers can search a complete body for a guarded
+/// marker.
+///
 /// Use this for outer parser states that keep the full buffered input across
 /// chunks while waiting for a closing marker. Plain `take_until` is still a
-/// better fit for one-shot parsers over a complete body, and for `1..` cases
-/// where an empty slice before the marker should be rejected.
+/// better fit for one-shot parsers over a complete text-only body, and for
+/// `1..` cases where an empty slice before the marker should be rejected.
 pub fn take_until_marker<'i, 'a, I: MarkerStream<'i>, M: MarkerLike + 'a>(
     marker: M,
     state: &'a mut MarkerScanState,
@@ -189,8 +193,15 @@ fn take_until_marker_<'i, I: MarkerStream<'i>, M: MarkerLike>(
 ) -> ModalResult<&'i str> {
     debug_assert!(!marker.as_marker().as_str().is_empty());
 
+    let missing = || {
+        if input.is_partial() {
+            incomplete()
+        } else {
+            Err(ErrMode::Backtrack(ContextError::new()))
+        }
+    };
     if input.eof_offset() == 0 {
-        return incomplete();
+        return missing();
     }
 
     let start = input.offset();
@@ -205,7 +216,7 @@ fn take_until_marker_<'i, I: MarkerStream<'i>, M: MarkerLike>(
         }
         Scan::Pending(at) | Scan::Clear(at) => {
             state.scan_start = at - start;
-            incomplete()
+            missing()
         }
     }
 }
