@@ -33,6 +33,7 @@ class MooncakeStoreConfig:
     device_name: str
     mode: MooncakeMode = "embedded"
     global_segment_size: int = DEFAULT_GLOBAL_SEGMENT_SIZE
+    # Zero disables the local pool when transfers use preallocated buffers.
     local_buffer_size: int = DEFAULT_LOCAL_BUFFER_SIZE
     enable_offload: bool = False
     tenant_id: str = DEFAULT_TENANT_ID
@@ -40,8 +41,8 @@ class MooncakeStoreConfig:
     def __post_init__(self) -> None:
         if self.mode not in ("embedded", "standalone-store"):
             raise ValueError(f"unknown Mooncake mode: {self.mode!r}")
-        if self.local_buffer_size <= 0:
-            raise ValueError("local_buffer_size must be > 0")
+        if self.local_buffer_size < 0:
+            raise ValueError("local_buffer_size must be >= 0")
         if self.mode == "embedded" and self.global_segment_size == 0:
             raise ValueError("embedded mode requires global_segment_size > 0")
         if self.mode == "standalone-store" and self.global_segment_size != 0:

@@ -130,6 +130,12 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
     """KV connector using MooncakeDistributedStore as shared KV pool."""
 
     @classmethod
+    def supports_lookahead_block_hashes(
+        cls, kv_transfer_config: KVTransferConfig
+    ) -> bool:
+        return True
+
+    @classmethod
     def supports_sleep_mode(cls, kv_transfer_config: KVTransferConfig) -> bool:
         config = MooncakeStoreConfig.load_from_config()
         if (
@@ -211,7 +217,12 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
                 vllm_config, kv_cache_config
             )
         else:
-            self.connector_worker = MooncakeStoreWorker(vllm_config, kv_cache_config)
+            self.connector_worker = self._create_worker(vllm_config, kv_cache_config)
+
+    def _create_worker(
+        self, vllm_config: VllmConfig, kv_cache_config: KVCacheConfig
+    ) -> MooncakeStoreWorker:
+        return MooncakeStoreWorker(vllm_config, kv_cache_config)
 
     def shutdown(self):
         """Release connector resources on teardown.
@@ -286,6 +297,8 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
     ) -> tuple[bool, dict[str, Any] | None]:
         # An in-flight store job holds its own reference on the blocks it reads,
         # so a finishing request never has to defer freeing them.
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.register_finished_lookahead_save(request, block_ids)
         return False, None
 
     def register_finished_partial_tail(
